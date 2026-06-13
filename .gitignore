@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+.vscode/
+*.pyc
+
+# Logs
+*.log
+
+# Data
+*.csv
+*.tmp
+*.npz
+*.npy
+*.pt
+
+# Build
+dist/
+build/
+
+# Environment
+.env
+.venv/
