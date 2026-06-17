@@ -1,5 +1,5 @@
 import os
-from typing import Dict
+from typing import Dict, Optional
 
 import torch
 
@@ -59,6 +59,42 @@ FOCAL_ALPHA = 0.25
 FOCAL_GAMMA = 2.0
 
 
+def get_default_train_config() -> Dict[str, object]:
+    return {
+        "TRAIN_DATA_PATH": TRAIN_DATA_PATH,
+        "SAVE_MODEL_PATH": SAVE_MODEL_PATH,
+        "TRAIN_RATIO": TRAIN_RATIO,
+        "MAX_LEN": MAX_LEN,
+        "STRIDE": STRIDE,
+        "BATCH_SIZE": BATCH_SIZE,
+        "EPOCHS": EPOCHS,
+        "PATIENCE": PATIENCE,
+        "LEARNING_RATE": LEARNING_RATE,
+        "WEIGHT_DECAY": WEIGHT_DECAY,
+        "SEED": SEED,
+        "NUM_WORKERS": NUM_WORKERS,
+        "USE_CUDA": USE_CUDA,
+        "D_MODEL": D_MODEL,
+        "NUM_LAYERS": NUM_LAYERS,
+        "NUM_HEADS": NUM_HEADS,
+        "DIM_FEEDFORWARD": DIM_FEEDFORWARD,
+        "DROPOUT": DROPOUT,
+        "LOCAL_RELATIVE_POSITION": LOCAL_RELATIVE_POSITION,
+        "NUM_RANDOM_FEATURES": NUM_RANDOM_FEATURES,
+        "SPE_HIDDEN_DIM": SPE_HIDDEN_DIM,
+        "SPE_CONV_KERNEL_SIZE": SPE_CONV_KERNEL_SIZE,
+        "MAX_GLOBAL_DISTANCE": MAX_GLOBAL_DISTANCE,
+        "FOURIER_SCALE": FOURIER_SCALE,
+        "USE_ROPE": USE_ROPE,
+        "USE_STRUCT_BIAS": USE_STRUCT_BIAS,
+        "STRUCT_HIDDEN_DIM": STRUCT_HIDDEN_DIM,
+        "CONTACT_CUTOFF": CONTACT_CUTOFF,
+        "LOSS_NAME": LOSS_NAME,
+        "FOCAL_ALPHA": FOCAL_ALPHA,
+        "FOCAL_GAMMA": FOCAL_GAMMA,
+    }
+
+
 def save_checkpoint(path: str, checkpoint: Dict[str, object]) -> None:
     directory = os.path.dirname(os.path.abspath(path))
     if directory:
@@ -90,23 +126,63 @@ def build_loss(name: str, pos_weight: float, alpha: float, gamma: float) -> torc
     )
 
 
-def main() -> None:
-    set_seed(SEED)
+def run_training(config_overrides: Optional[Dict[str, object]] = None) -> Dict[str, object]:
+    cfg = get_default_train_config()
+    if config_overrides:
+        cfg.update(config_overrides)
 
-    device = torch.device("cuda" if torch.cuda.is_available() and USE_CUDA else "cpu")
+    train_data_path = str(cfg["TRAIN_DATA_PATH"])
+    save_model_path = str(cfg["SAVE_MODEL_PATH"])
+    train_ratio = float(cfg["TRAIN_RATIO"])
+    max_len = int(cfg["MAX_LEN"])
+    stride = int(cfg["STRIDE"])
+    batch_size = int(cfg["BATCH_SIZE"])
+    epochs = int(cfg["EPOCHS"])
+    patience = int(cfg["PATIENCE"])
+    learning_rate = float(cfg["LEARNING_RATE"])
+    weight_decay = float(cfg["WEIGHT_DECAY"])
+    seed = int(cfg["SEED"])
+    num_workers = int(cfg["NUM_WORKERS"])
+    use_cuda = bool(cfg["USE_CUDA"])
+
+    d_model = int(cfg["D_MODEL"])
+    num_layers = int(cfg["NUM_LAYERS"])
+    num_heads = int(cfg["NUM_HEADS"])
+    dim_feedforward = int(cfg["DIM_FEEDFORWARD"])
+    dropout = float(cfg["DROPOUT"])
+
+    local_relative_position = int(cfg["LOCAL_RELATIVE_POSITION"])
+    num_random_features = int(cfg["NUM_RANDOM_FEATURES"])
+    spe_hidden_dim = int(cfg["SPE_HIDDEN_DIM"])
+    spe_conv_kernel_size = int(cfg["SPE_CONV_KERNEL_SIZE"])
+    max_global_distance = int(cfg["MAX_GLOBAL_DISTANCE"])
+    fourier_scale = float(cfg["FOURIER_SCALE"])
+
+    use_rope = bool(cfg["USE_ROPE"])
+    use_struct_bias = bool(cfg["USE_STRUCT_BIAS"])
+    struct_hidden_dim = int(cfg["STRUCT_HIDDEN_DIM"])
+    contact_cutoff = float(cfg["CONTACT_CUTOFF"])
+
+    loss_name = str(cfg["LOSS_NAME"])
+    focal_alpha = float(cfg["FOCAL_ALPHA"])
+    focal_gamma = float(cfg["FOCAL_GAMMA"])
+
+    set_seed(seed)
+
+    device = torch.device("cuda" if torch.cuda.is_available() and use_cuda else "cpu")
     print(f"Device: {device}")
 
-    all_sequences = load_graph_sequences(TRAIN_DATA_PATH, require_y=True)
+    all_sequences = load_graph_sequences(train_data_path, require_y=True)
     train_sequences, val_sequences = split_sequences_by_protein(
         all_sequences,
-        train_ratio=TRAIN_RATIO,
-        seed=SEED,
+        train_ratio=train_ratio,
+        seed=seed,
     )
     input_dim = int(train_sequences[0].x.size(1))
     pos_weight = compute_pos_weight(train_sequences)
 
     print("\nData summary")
-    print(f"Train data: {TRAIN_DATA_PATH}")
+    print(f"Train data: {train_data_path}")
     print(f"Total proteins: {len(all_sequences)}")
     print(f"Train proteins: {len(train_sequences)}")
     print(f"Val proteins: {len(val_sequences)}")
@@ -115,46 +191,46 @@ def main() -> None:
 
     train_loader = make_window_loader(
         sequences=train_sequences,
-        batch_size=BATCH_SIZE,
-        max_len=MAX_LEN,
-        stride=STRIDE,
+        batch_size=batch_size,
+        max_len=max_len,
+        stride=stride,
         shuffle=True,
-        num_workers=NUM_WORKERS,
+        num_workers=num_workers,
     )
 
     model_config = checkpoint_model_config(
         input_dim=input_dim,
-        d_model=D_MODEL,
-        num_layers=NUM_LAYERS,
-        num_heads=NUM_HEADS,
-        dim_feedforward=DIM_FEEDFORWARD,
-        dropout=DROPOUT,
-        local_relative_position=LOCAL_RELATIVE_POSITION,
-        num_random_features=NUM_RANDOM_FEATURES,
-        spe_hidden_dim=SPE_HIDDEN_DIM,
-        spe_conv_kernel_size=SPE_CONV_KERNEL_SIZE,
-        max_global_distance=MAX_GLOBAL_DISTANCE,
-        fourier_scale=FOURIER_SCALE,
-        use_rope=USE_ROPE,
-        use_struct_bias=USE_STRUCT_BIAS,
-        struct_hidden_dim=STRUCT_HIDDEN_DIM,
-        contact_cutoff=CONTACT_CUTOFF,
+        d_model=d_model,
+        num_layers=num_layers,
+        num_heads=num_heads,
+        dim_feedforward=dim_feedforward,
+        dropout=dropout,
+        local_relative_position=local_relative_position,
+        num_random_features=num_random_features,
+        spe_hidden_dim=spe_hidden_dim,
+        spe_conv_kernel_size=spe_conv_kernel_size,
+        max_global_distance=max_global_distance,
+        fourier_scale=fourier_scale,
+        use_rope=use_rope,
+        use_struct_bias=use_struct_bias,
+        struct_hidden_dim=struct_hidden_dim,
+        contact_cutoff=contact_cutoff,
     )
     model = build_model_from_config(model_config).to(device)
     criterion = build_loss(
-        LOSS_NAME,
+        loss_name,
         pos_weight=pos_weight,
-        alpha=FOCAL_ALPHA,
-        gamma=FOCAL_GAMMA,
+        alpha=focal_alpha,
+        gamma=focal_gamma,
     ).to(device)
     optimizer = torch.optim.AdamW(
         model.parameters(),
-        lr=LEARNING_RATE,
-        weight_decay=WEIGHT_DECAY,
+        lr=learning_rate,
+        weight_decay=weight_decay,
     )
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         optimizer,
-        T_max=max(EPOCHS, 1),
+        T_max=max(epochs, 1),
     )
 
     best_val_mcc = -1.0
@@ -167,7 +243,7 @@ def main() -> None:
     print(f"Parameters: {sum(p.numel() for p in model.parameters()):,}")
 
     print("\nStart training")
-    for epoch in range(1, EPOCHS + 1):
+    for epoch in range(1, epochs + 1):
         model.train()
         running_loss = 0.0
 
@@ -192,11 +268,11 @@ def main() -> None:
         val_result = predict_sequences(
             model=model,
             sequences=val_sequences,
-            batch_size=BATCH_SIZE,
-            max_len=MAX_LEN,
-            stride=STRIDE,
+            batch_size=batch_size,
+            max_len=max_len,
+            stride=stride,
             device=device,
-            num_workers=NUM_WORKERS,
+            num_workers=num_workers,
         )
         val_labels = val_result["label"]
         val_probs = val_result["prob"]
@@ -217,18 +293,18 @@ def main() -> None:
             best_metrics = val_metrics
             stale_epochs = 0
             save_checkpoint(
-                SAVE_MODEL_PATH,
+                save_model_path,
                 {
                     "model_state_dict": model.state_dict(),
                     "model_config": model_config,
                     "threshold": best_threshold,
                     "val_metrics": best_metrics,
-                    "max_len": MAX_LEN,
-                    "stride": STRIDE,
-                    "train_data": TRAIN_DATA_PATH,
-                    "loss": LOSS_NAME,
-                    "focal_alpha": FOCAL_ALPHA,
-                    "focal_gamma": FOCAL_GAMMA,
+                    "max_len": max_len,
+                    "stride": stride,
+                    "train_data": train_data_path,
+                    "loss": loss_name,
+                    "focal_alpha": focal_alpha,
+                    "focal_gamma": focal_gamma,
                     "pos_weight": pos_weight,
                     "architecture": (
                         "v3 RoPE Transformer with exact local bias and "
@@ -238,13 +314,27 @@ def main() -> None:
             )
         else:
             stale_epochs += 1
-            if stale_epochs >= PATIENCE:
+            if stale_epochs >= patience:
                 print("Early stopping.")
                 break
 
     print("\nBest validation")
     print_metrics("Val", best_metrics, best_threshold)
-    print(f"Saved model: {SAVE_MODEL_PATH}")
+    print(f"Saved model: {save_model_path}")
+    return {
+        "save_model_path": save_model_path,
+        "best_threshold": best_threshold,
+        "best_val_mcc": best_val_mcc,
+        "best_metrics": best_metrics,
+        "model_config": model_config,
+        "train_data_path": train_data_path,
+        "max_len": max_len,
+        "stride": stride,
+    }
+
+
+def main() -> None:
+    run_training()
 
 
 if __name__ == "__main__":
